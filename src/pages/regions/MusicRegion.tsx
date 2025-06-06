@@ -1,29 +1,151 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Play, Plus, Heart, MoreHorizontal } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
+import SpotifyAuth from '../../components/SpotifyAuth';
+import CreatePlaylistModal from '../../components/CreatePlaylistModal';
+import MusicPlayer from '../../components/MusicPlayer';
+import { useAuth } from '../../contexts/AuthContext';
+import { spotifyService } from '../../services/spotify';
+import { musicFirebaseService } from '../../services/musicFirebase';
+import { useSpotifyPlayer } from '../../hooks/useSpotifyPlayer';
+import { useLocation } from 'react-router-dom';
 
-// Mock data for playlists
-const mockPlaylists = [
-  { id: 1, name: "Healing Melodies", songs: 24, image: "https://images.pexels.com/photos/3941855/pexels-photo-3941855.jpeg" },
-  { id: 2, name: "Moving Forward", songs: 18, image: "https://images.pexels.com/photos/1105666/pexels-photo-1105666.jpeg" },
-  { id: 3, name: "Self-Love Journey", songs: 15, image: "https://images.pexels.com/photos/1028599/pexels-photo-1028599.jpeg" },
-];
+interface Track {
+  id: string;
+  name: string;
+  artists: { name: string }[];
+  duration_ms: number;
+  uri: string;
+  album: {
+    name: string;
+    images: { url: string }[];
+  };
+}
 
-// Mock data for songs
-const mockSongs = [
-  { id: 1, title: "Healing Begins", artist: "Serene Sounds", duration: "3:45", liked: true },
-  { id: 2, title: "Let It Go", artist: "The Healers", duration: "4:12", liked: false },
-  { id: 3, title: "New Beginnings", artist: "Soul Revival", duration: "3:28", liked: true },
-  { id: 4, title: "Inner Peace", artist: "Mindful Melodies", duration: "5:03", liked: false },
-  { id: 5, title: "Rising Again", artist: "Phoenix Rising", duration: "4:37", liked: true },
-  { id: 6, title: "Self-Compassion", artist: "Heart Whispers", duration: "3:51", liked: false },
-];
+interface Playlist {
+  id: string;
+  name: string;
+  description: string;
+  images: { url: string }[];
+  tracks: {
+    total: number;
+  };
+}
 
 const MusicRegion: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentTab, setCurrentTab] = useState('discover');
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [searchResults, setSearchResults] = useState<Track[]>([]);
+  const [likedSongs, setLikedSongs] = useState<Track[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   
+  const { currentUser } = useAuth();
+  const { playTrack } = useSpotifyPlayer();
+  const location = useLocation();
+
+  useEffect(() => {
+    const token = localStorage.getItem('spotify_token');
+    if (token) {
+      spotifyService.setAccessToken(token);
+      setIsAuthenticated(true);
+      loadUserContent();
+    }
+
+    // Check for authentication errors
+    const state = location.state as { error?: string };
+    if (state?.error) {
+      console.error('Authentication error:', state.error);
+    }
+  }, [location]);
+
+  const loadUserContent = async () => {
+    if (!currentUser) return;
+    
+    setIsLoading(true);
+    try {
+      // Load playlists
+      const userPlaylists = await spotifyService.getUserPlaylists();
+      setPlaylists(userPlaylists);
+
+      // Load liked songs
+      const likedSongs = await musicFirebaseService.getLikedSongs(currentUser.id);
+      // Convert Firebase liked songs to Spotify track format
+      const likedTracks = likedSongs.map(song => ({
+        id: song.spotifyTrackId,
+        name: song.name,
+        artists: [{ name: song.artist }],
+        album: {
+          name: song.name,
+          images: [{ url: song.imageUrl }]
+        },
+        duration_ms: 0,
+        uri: `spotify:track:${song.spotifyTrackId}`
+      } as Track));
+      setLikedSongs(likedTracks);
+    } catch (error) {
+      console.error('Error loading user content:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSearch = async (query: string) => {
+    setSearchQuery(query);
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
+    }
+
+    try {
+      const results = await spotifyService.searchTracks(query);
+      setSearchResults(results);
+    } catch (error) {
+      console.error('Search error:', error);
+    }
+  };
+
+  const handlePlayTrack = async (track: Track) => {
+    try {
+      await playTrack(track.uri);
+      await musicFirebaseService.addRecentlyPlayed(currentUser!.id, track);
+    } catch (error) {
+      console.error('Error playing track:', error);
+    }
+  };
+
+  const handleToggleLike = async (track: Track) => {
+    if (!currentUser) return;
+
+    try {
+      const isLiked = await musicFirebaseService.toggleLikedSong(currentUser.id, track);
+      if (isLiked) {
+        setLikedSongs(prev => [...prev, track]);
+      } else {
+        setLikedSongs(prev => prev.filter(t => t.id !== track.id));
+      }
+    } catch (error) {
+      console.error('Error toggling like:', error);
+    }
+  };
+
+  const handleAuthSuccess = (token: string) => {
+    spotifyService.setAccessToken(token);
+    setIsAuthenticated(true);
+    loadUserContent();
+  };
+
+  if (!isAuthenticated) {
+    return (
+      <DashboardLayout>
+        <SpotifyAuth onAuthSuccess={handleAuthSuccess} />
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout>
       <div className="max-w-6xl mx-auto">
@@ -51,7 +173,7 @@ const MusicRegion: React.FC = () => {
                 className="input pl-10"
                 placeholder="Search songs, artists, or playlists..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => handleSearch(e.target.value)}
               />
             </div>
           </div>
@@ -92,49 +214,9 @@ const MusicRegion: React.FC = () => {
           {currentTab === 'discover' && (
             <div className="p-6">
               <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">
-                Healing Collections
+                {searchQuery ? 'Search Results' : 'Recommended for You'}
               </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {mockPlaylists.map((playlist) => (
-                  <motion.div
-                    key={playlist.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="bg-primary-50 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
-                  >
-                    <div className="relative h-48 overflow-hidden">
-                      <img
-                        src={playlist.image}
-                        alt={playlist.name}
-                        className="w-full h-full object-cover"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-                      <button className="absolute bottom-4 right-4 bg-primary-500 hover:bg-primary-600 text-white p-3 rounded-full shadow-lg transition-colors">
-                        <Play size={20} fill="white" />
-                      </button>
-                    </div>
-                    <div className="p-4">
-                      <h3 className="font-medium text-primary-800">{playlist.name}</h3>
-                      <p className="text-sm text-accent-600">{playlist.songs} songs</p>
-                    </div>
-                  </motion.div>
-                ))}
-                
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: 0.2 }}
-                  className="bg-accent-50 rounded-xl overflow-hidden border-2 border-dashed border-accent-200 flex flex-col items-center justify-center h-48 text-accent-600 hover:bg-accent-100 transition-colors cursor-pointer"
-                >
-                  <Plus size={32} className="mb-2" />
-                  <span className="font-medium">Create Playlist</span>
-                </motion.div>
-              </div>
               
-              <h2 className="text-xl font-display font-semibold text-primary-800 mt-10 mb-4">
-                Recommended for You
-              </h2>
               <div className="overflow-x-auto">
                 <table className="min-w-full">
                   <thead>
@@ -147,19 +229,39 @@ const MusicRegion: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {mockSongs.map((song, index) => (
-                      <tr key={song.id} className="border-b border-accent-100 hover:bg-primary-50">
+                    {(searchQuery ? searchResults : []).map((track, index) => (
+                      <tr key={track.id} className="border-b border-accent-100 hover:bg-primary-50">
                         <td className="py-3 pl-4 text-accent-600">{index + 1}</td>
-                        <td className="py-3 font-medium text-primary-800">{song.title}</td>
-                        <td className="py-3 text-accent-700">{song.artist}</td>
-                        <td className="py-3 text-right text-accent-600 pr-4">{song.duration}</td>
+                        <td className="py-3 font-medium text-primary-800">{track.name}</td>
+                        <td className="py-3 text-accent-700">
+                          {track.artists.map(a => a.name).join(', ')}
+                        </td>
+                        <td className="py-3 text-right text-accent-600 pr-4">
+                          {Math.floor(track.duration_ms / 60000)}:
+                          {Math.floor((track.duration_ms % 60000) / 1000)
+                            .toString()
+                            .padStart(2, '0')}
+                        </td>
                         <td className="py-3">
                           <div className="flex items-center justify-center space-x-3">
-                            <button className="text-accent-500 hover:text-primary-600">
+                            <button
+                              onClick={() => handlePlayTrack(track)}
+                              className="text-accent-500 hover:text-primary-600"
+                            >
                               <Play size={18} />
                             </button>
-                            <button className={song.liked ? "text-secondary-500" : "text-accent-500 hover:text-secondary-500"}>
-                              <Heart size={18} fill={song.liked ? "currentColor" : "none"} />
+                            <button
+                              onClick={() => handleToggleLike(track)}
+                              className={
+                                likedSongs.some(s => s.id === track.id)
+                                  ? "text-secondary-500"
+                                  : "text-accent-500 hover:text-secondary-500"
+                              }
+                            >
+                              <Heart
+                                size={18}
+                                fill={likedSongs.some(s => s.id === track.id) ? "currentColor" : "none"}
+                              />
                             </button>
                             <button className="text-accent-500 hover:text-primary-600">
                               <MoreHorizontal size={18} />
@@ -180,14 +282,17 @@ const MusicRegion: React.FC = () => {
                 <h2 className="text-xl font-display font-semibold text-primary-800">
                   Your Playlists
                 </h2>
-                <button className="btn-primary">
+                <button
+                  className="btn-primary"
+                  onClick={() => setIsCreateModalOpen(true)}
+                >
                   <Plus size={16} className="mr-2" />
                   New Playlist
                 </button>
               </div>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {mockPlaylists.map((playlist) => (
+                {playlists.map((playlist) => (
                   <motion.div
                     key={playlist.id}
                     initial={{ opacity: 0, y: 10 }}
@@ -197,7 +302,7 @@ const MusicRegion: React.FC = () => {
                   >
                     <div className="relative h-48 overflow-hidden">
                       <img
-                        src={playlist.image}
+                        src={playlist.images[0]?.url || '/placeholder.jpg'}
                         alt={playlist.name}
                         className="w-full h-full object-cover"
                       />
@@ -208,7 +313,7 @@ const MusicRegion: React.FC = () => {
                     </div>
                     <div className="p-4">
                       <h3 className="font-medium text-primary-800">{playlist.name}</h3>
-                      <p className="text-sm text-accent-600">{playlist.songs} songs</p>
+                      <p className="text-sm text-accent-600">{playlist.tracks.total} songs</p>
                     </div>
                   </motion.div>
                 ))}
@@ -229,27 +334,30 @@ const MusicRegion: React.FC = () => {
                       <th className="pb-3 pl-4">#</th>
                       <th className="pb-3">Title</th>
                       <th className="pb-3">Artist</th>
-                      <th className="pb-3 text-right pr-4">Duration</th>
                       <th className="pb-3 text-center">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {mockSongs.filter(song => song.liked).map((song, index) => (
-                      <tr key={song.id} className="border-b border-accent-100 hover:bg-primary-50">
+                    {likedSongs.map((track, index) => (
+                      <tr key={track.id} className="border-b border-accent-100 hover:bg-primary-50">
                         <td className="py-3 pl-4 text-accent-600">{index + 1}</td>
-                        <td className="py-3 font-medium text-primary-800">{song.title}</td>
-                        <td className="py-3 text-accent-700">{song.artist}</td>
-                        <td className="py-3 text-right text-accent-600 pr-4">{song.duration}</td>
+                        <td className="py-3 font-medium text-primary-800">{track.name}</td>
+                        <td className="py-3 text-accent-700">
+                          {track.artists.map(a => a.name).join(', ')}
+                        </td>
                         <td className="py-3">
                           <div className="flex items-center justify-center space-x-3">
-                            <button className="text-accent-500 hover:text-primary-600">
+                            <button
+                              onClick={() => handlePlayTrack(track)}
+                              className="text-accent-500 hover:text-primary-600"
+                            >
                               <Play size={18} />
                             </button>
-                            <button className="text-secondary-500">
+                            <button
+                              onClick={() => handleToggleLike(track)}
+                              className="text-secondary-500"
+                            >
                               <Heart size={18} fill="currentColor" />
-                            </button>
-                            <button className="text-accent-500 hover:text-primary-600">
-                              <MoreHorizontal size={18} />
                             </button>
                           </div>
                         </td>
@@ -261,48 +369,15 @@ const MusicRegion: React.FC = () => {
             </div>
           )}
         </div>
-        
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.5, duration: 0.8 }}
-          className="bg-white rounded-2xl shadow-md p-8 mb-8"
-        >
-          <h2 className="text-xl font-display font-semibold text-primary-800 mb-4">
-            Music & Emotions
-          </h2>
-          <p className="text-accent-700 mb-6">
-            Music therapy can be a powerful way to process emotions. Different types of music can help with different aspects of healing.
-          </p>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-primary-50 rounded-lg p-6">
-              <h3 className="font-medium text-primary-800 mb-2">For Processing Grief</h3>
-              <p className="text-accent-700 text-sm">
-                Slow, reflective music can create a safe space to feel and process sadness and loss.
-              </p>
-            </div>
-            <div className="bg-secondary-50 rounded-lg p-6">
-              <h3 className="font-medium text-primary-800 mb-2">For Releasing Anger</h3>
-              <p className="text-accent-700 text-sm">
-                More intense or rhythmic music can help channel and release feelings of anger or frustration.
-              </p>
-            </div>
-            <div className="bg-accent-50 rounded-lg p-6">
-              <h3 className="font-medium text-primary-800 mb-2">For Boosting Mood</h3>
-              <p className="text-accent-700 text-sm">
-                Upbeat, positive music can help lift your spirits and remind you that joy is still possible.
-              </p>
-            </div>
-            <div className="bg-success-50 rounded-lg p-6">
-              <h3 className="font-medium text-primary-800 mb-2">For Finding Calm</h3>
-              <p className="text-accent-700 text-sm">
-                Ambient or nature-based sounds can reduce anxiety and promote a sense of peace.
-              </p>
-            </div>
-          </div>
-        </motion.div>
       </div>
+
+      <CreatePlaylistModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onPlaylistCreated={loadUserContent}
+      />
+
+      <MusicPlayer />
     </DashboardLayout>
   );
 };

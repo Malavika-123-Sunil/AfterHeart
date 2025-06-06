@@ -1,7 +1,15 @@
 {
   "files": [],
+  "compilerOptions": {
+    "moduleResolution": "node",
+    "allowJs": true,
+    "jsx": "react-jsx",
+    // other options...
+  },
+  "include": ["src"] ,
   "references": [
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.node.json" }
   ]
 }
+

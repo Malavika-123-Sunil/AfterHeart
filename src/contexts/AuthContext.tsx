@@ -1,9 +1,16 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
+import { 
+  User as FirebaseUser,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged
+} from 'firebase/auth';
+import { auth, createUserWithProfile } from '../firebase';
 
 interface User {
   id: string;
-  email: string;
-  name: string;
+  email: string | null;
+  name: string | null;
 }
 
 interface AuthContextType {
@@ -25,72 +32,53 @@ export const useAuth = () => {
   return context;
 };
 
+const mapFirebaseUser = (firebaseUser: FirebaseUser): User => ({
+  id: firebaseUser.uid,
+  email: firebaseUser.email,
+  name: firebaseUser.displayName
+});
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Mock authentication functions for demonstration
   const login = async (email: string, password: string) => {
-    // Simulate API call
-    setLoading(true);
     try {
-      // In a real app, this would be an actual API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Mock successful login
-      const user = { id: '123', email, name: email.split('@')[0] };
-      localStorage.setItem('afterheart_user', JSON.stringify(user));
-      setCurrentUser(user);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      setCurrentUser(mapFirebaseUser(userCredential.user));
     } catch (error) {
       console.error('Login error:', error);
       throw error;
-    } finally {
-      setLoading(false);
     }
   };
 
   const signup = async (email: string, password: string, name: string) => {
-    // Simulate API call
-    setLoading(true);
     try {
-      // In a real app, this would be an actual API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Mock successful signup
-      const user = { id: '123', email, name };
-      localStorage.setItem('afterheart_user', JSON.stringify(user));
-      setCurrentUser(user);
+      const user = await createUserWithProfile(email, password, name);
+      setCurrentUser(mapFirebaseUser(user));
     } catch (error) {
       console.error('Signup error:', error);
       throw error;
-    } finally {
-      setLoading(false);
     }
   };
 
   const logout = async () => {
-    setLoading(true);
     try {
-      // In a real app, this would be an actual API call
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      localStorage.removeItem('afterheart_user');
+      await signOut(auth);
       setCurrentUser(null);
     } catch (error) {
       console.error('Logout error:', error);
       throw error;
-    } finally {
-      setLoading(false);
     }
   };
 
   useEffect(() => {
-    // Check if user is stored in localStorage
-    const storedUser = localStorage.getItem('afterheart_user');
-    if (storedUser) {
-      setCurrentUser(JSON.parse(storedUser));
-    }
-    setLoading(false);
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user ? mapFirebaseUser(user) : null);
+      setLoading(false);
+    });
+
+    return unsubscribe;
   }, []);
 
   const value = {
@@ -102,5 +90,5 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isAuthenticated: !!currentUser,
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={value}>{!loading && children}</AuthContext.Provider>;
 };

@@ -1,4 +1,4 @@
-// MusicRegion.tsx (Fully Fixed with Search + Playlists + 'Open in Spotify' Button + Token Expiry Handling)
+// MusicRegion.tsx (Fully Fixed + Tables with Headers for Playlists and Liked Songs)
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Play, Plus, Heart, MoreHorizontal } from 'lucide-react';
@@ -72,17 +72,6 @@ const MusicRegion: React.FC = () => {
     }
   }, [location]);
 
-  useEffect(() => {
-    const delayDebounce = setTimeout(() => {
-      if (searchQuery.trim()) {
-        handleSearch(searchQuery);
-      } else {
-        setSearchResults([]);
-      }
-    }, 400);
-    return () => clearTimeout(delayDebounce);
-  }, [searchQuery]);
-
   const loadUserContent = async () => {
     if (!currentUser) return;
     setIsLoading(true);
@@ -110,15 +99,6 @@ const MusicRegion: React.FC = () => {
     }
   };
 
-  const handleSearch = async (query: string) => {
-    try {
-      const results = await spotifyService.searchTracks(query);
-      setSearchResults(results);
-    } catch (error) {
-      console.error('Search error:', error);
-    }
-  };
-
   const handleToggleLike = async (track: Track) => {
     if (!currentUser) return;
     try {
@@ -137,12 +117,8 @@ const MusicRegion: React.FC = () => {
     return (
       <DashboardLayout>
         <div className="text-center p-8">
-          <h2 className="text-xl font-semibold text-primary-800 mb-3">
-            Spotify Session Expired
-          </h2>
-          <p className="text-accent-600 mb-4">
-            Your Spotify session has expired. Please reconnect to continue using music features.
-          </p>
+          <h2 className="text-xl font-semibold text-primary-800 mb-3">Spotify Session Expired</h2>
+          <p className="text-accent-600 mb-4">Your Spotify session has expired. Please reconnect to continue using music features.</p>
           <SpotifyAuth onAuthSuccess={(token) => {
             spotifyService.setAccessToken(token);
             setTokenExpired(false);
@@ -169,17 +145,9 @@ const MusicRegion: React.FC = () => {
   return (
     <DashboardLayout>
       <div className="max-w-6xl mx-auto">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <h1 className="text-3xl md:text-4xl font-display font-bold text-primary-800 mb-3">
-            Music Therapy
-          </h1>
-          <p className="text-accent-700 mb-8 text-lg">
-            Discover healing melodies and create playlists that support your emotional journey.
-          </p>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+          <h1 className="text-3xl md:text-4xl font-display font-bold text-primary-800 mb-3">Music Therapy</h1>
+          <p className="text-accent-700 mb-8 text-lg">Discover healing melodies and create playlists that support your emotional journey.</p>
         </motion.div>
 
         <div className="bg-white rounded-2xl shadow-md overflow-hidden mb-8">
@@ -213,28 +181,13 @@ const MusicRegion: React.FC = () => {
                   <tr key={track.id} className="border-b border-accent-100 hover:bg-primary-50">
                     <td className="py-3 pl-4 text-accent-600">{index + 1}</td>
                     <td className="py-3 font-medium text-primary-800">{track.name}</td>
-                    <td className="py-3 text-accent-700">
-                      {track.artists.map(a => a.name).join(', ')}
-                    </td>
+                    <td className="py-3 text-accent-700">{track.artists.map(a => a.name).join(', ')}</td>
                     <td className="py-3 pr-4 text-right">
                       <div className="flex items-center justify-end space-x-2">
-                        <button
-                          onClick={() => handleToggleLike(track)}
-                          className={
-                            likedSongs.some(s => s.id === track.id)
-                              ? 'text-secondary-500'
-                              : 'text-accent-500 hover:text-secondary-500'
-                          }
-                        >
-                          <Heart
-                            size={18}
-                            fill={likedSongs.some(s => s.id === track.id) ? 'currentColor' : 'none'}
-                          />
+                        <button onClick={() => handleToggleLike(track)} className={likedSongs.some(s => s.id === track.id) ? 'text-secondary-500' : 'text-accent-500 hover:text-secondary-500'}>
+                          <Heart size={18} fill={likedSongs.some(s => s.id === track.id) ? 'currentColor' : 'none'} />
                         </button>
-                        <button
-                          onClick={() => openInSpotify(track.uri)}
-                          className="bg-[#1DB954] hover:bg-[#1ed760] text-white px-3 py-1 rounded-full text-xs shadow-sm transition"
-                        >
+                        <button onClick={() => openInSpotify(track.uri)} className="bg-[#1DB954] hover:bg-[#1ed760] text-white px-3 py-1 rounded-full text-xs shadow-sm transition">
                           Open in Spotify
                         </button>
                       </div>
@@ -245,14 +198,74 @@ const MusicRegion: React.FC = () => {
             </table>
           </div>
         </div>
+
+        {currentTab === 'playlists' && (
+          <div className="p-6">
+            <h2 className="text-xl font-display font-semibold text-primary-800 mb-6">Your Playlists</h2>
+            <div className="overflow-x-auto">
+              <table className="min-w-full">
+                <thead>
+                  <tr className="text-left text-accent-600 border-b border-accent-100">
+                    <th className="pb-3 pl-4">#</th>
+                    <th className="pb-3">Title</th>
+                    <th className="pb-3">Description</th>
+                    <th className="pb-3 text-right pr-4">Songs</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {playlists.map((playlist, index) => (
+                    <tr key={playlist.id} className="border-b border-accent-100 hover:bg-primary-50">
+                      <td className="py-3 pl-4 text-accent-600">{index + 1}</td>
+                      <td className="py-3 font-medium text-primary-800">{playlist.name}</td>
+                      <td className="py-3 text-accent-700">{playlist.description || '—'}</td>
+                      <td className="py-3 pr-4 text-right text-accent-600">{playlist.tracks.total}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {currentTab === 'liked' && (
+          <div className="p-6">
+            <h2 className="text-xl font-display font-semibold text-primary-800 mb-6">Liked Songs</h2>
+            <div className="overflow-x-auto">
+              <table className="min-w-full">
+                <thead>
+                  <tr className="text-left text-accent-600 border-b border-accent-100">
+                    <th className="pb-3 pl-4">#</th>
+                    <th className="pb-3">Title</th>
+                    <th className="pb-3">Artist</th>
+                    <th className="pb-3 text-right pr-4">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {likedSongs.map((track, index) => (
+                    <tr key={track.id} className="border-b border-accent-100 hover:bg-primary-50">
+                      <td className="py-3 pl-4 text-accent-600">{index + 1}</td>
+                      <td className="py-3 font-medium text-primary-800">{track.name}</td>
+                      <td className="py-3 text-accent-700">{track.artists.map((a) => a.name).join(', ')}</td>
+                      <td className="py-3 pr-4 text-right">
+                        <div className="flex items-center justify-end space-x-2">
+                          <button onClick={() => handleToggleLike(track)} className="text-secondary-500">
+                            <Heart size={18} fill="currentColor" />
+                          </button>
+                          <button onClick={() => openInSpotify(track.uri)} className="bg-[#1DB954] hover:bg-[#1ed760] text-white px-3 py-1 rounded-full text-xs shadow-sm transition">
+                            Open in Spotify
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
-      <CreatePlaylistModal
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
-        onPlaylistCreated={loadUserContent}
-      />
-
+      <CreatePlaylistModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} onPlaylistCreated={loadUserContent} />
       <MusicPlayer />
     </DashboardLayout>
   );

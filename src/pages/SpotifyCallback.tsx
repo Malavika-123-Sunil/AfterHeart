@@ -9,18 +9,35 @@ const SpotifyCallback: React.FC = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const exchangeToken = async () => {
-      const params = new URLSearchParams(window.location.search);
-      const code = params.get('code');
-      const state = params.get('state');
+    const fetchAccessToken = async () => {
+      const queryParams = new URLSearchParams(window.location.search);
+      const code = queryParams.get('code');
+      const state = queryParams.get('state');
+      const error = queryParams.get('error');
       const storedState = localStorage.getItem('spotify_auth_state');
-      const verifier = localStorage.getItem('spotify_code_verifier');
+      const codeVerifier = localStorage.getItem('spotify_code_verifier');
 
-      if (!code || !state || !verifier || state !== storedState) {
-        console.error('Invalid redirect from Spotify');
+      // Clear state from storage
+      localStorage.removeItem('spotify_auth_state');
+      localStorage.removeItem('spotify_code_verifier');
+
+      if (error) {
+        console.error('Spotify auth error:', error);
         navigate('/music', {
           state: {
-            error: 'Invalid Spotify redirect',
+            error: 'Authentication failed',
+            details: error,
+          },
+        });
+        return;
+      }
+
+      if (!code || !state || state !== storedState || !codeVerifier) {
+        console.error('State mismatch or missing code/verifier');
+        navigate('/music', {
+          state: {
+            error: 'Security verification failed',
+            details: 'State mismatch or missing code. Please try again.',
           },
         });
         return;
@@ -28,11 +45,11 @@ const SpotifyCallback: React.FC = () => {
 
       try {
         const body = new URLSearchParams({
+          client_id: SPOTIFY_CLIENT_ID,
           grant_type: 'authorization_code',
           code,
           redirect_uri: REDIRECT_URI,
-          client_id: SPOTIFY_CLIENT_ID,
-          code_verifier: verifier,
+          code_verifier: codeVerifier,
         });
 
         const response = await fetch('https://accounts.spotify.com/api/token', {
@@ -43,46 +60,41 @@ const SpotifyCallback: React.FC = () => {
           body: body.toString(),
         });
 
-        const data = await response.json();
-
-        if (data.access_token) {
-          console.log('✅ Access token received:', data.access_token);
-          spotifyService.setAccessToken(data.access_token);
-          localStorage.setItem('spotify_token', data.access_token);
-          localStorage.setItem('spotify_token_timestamp', Date.now().toString());
-
-          navigate('/music', { state: { success: true } });
-        } else {
-          console.error('❌ Failed to exchange token:', data);
-          navigate('/music', {
-            state: {
-              error: 'Failed to retrieve Spotify token',
-              details: data.error_description || 'No token received',
-            },
-          });
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error_description || 'Token request failed');
         }
+
+        const data = await response.json();
+        const { access_token, expires_in } = data;
+
+        // Store access token and timestamp
+        localStorage.setItem('spotify_token', access_token);
+        localStorage.setItem('spotify_token_timestamp', Date.now().toString());
+        spotifyService.setAccessToken(access_token);
+
+        console.log('Spotify authenticated successfully!');
+        navigate('/music', { state: { success: true } });
       } catch (err) {
-        console.error('Token exchange failed:', err);
+        console.error('Token exchange error:', err);
         navigate('/music', {
           state: {
-            error: 'Token exchange error',
-            details: 'An unexpected error occurred while connecting to Spotify.',
+            error: 'Token exchange failed',
+            details: (err as Error).message,
           },
         });
       }
     };
 
-    exchangeToken();
+    fetchAccessToken();
   }, [navigate]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-primary-50 to-white">
       <div className="text-center space-y-4">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-        <p className="mt-4 text-accent-600">Finalizing Spotify login...</p>
-        <p className="text-sm text-accent-400">
-          Please wait while we complete the authentication process.
-        </p>
+        <p className="mt-4 text-accent-600">Connecting to Spotify...</p>
+        <p className="text-sm text-accent-400">Please wait while we complete the authentication process.</p>
       </div>
     </div>
   );

@@ -30,25 +30,31 @@ const SpotifyAuth: React.FC<SpotifyAuthProps> = ({ onAuthSuccess }) => {
   useEffect(() => {
     const token = localStorage.getItem('spotify_token');
     const timestamp = localStorage.getItem('spotify_token_timestamp');
+    const expiresAt = localStorage.getItem('spotify_token_expires_at');
 
-    if (token && timestamp) {
-      const isExpired = Date.now() - parseInt(timestamp) > 3600000;
-      if (!isExpired) {
-        spotifyService.setAccessToken(token);
-        setIsAuthenticated(true);
-        onAuthSuccess(token);
-      } else {
-        localStorage.removeItem('spotify_token');
-        localStorage.removeItem('spotify_token_timestamp');
-      }
+    const now = Date.now();
+
+    if (token && timestamp && expiresAt && now < parseInt(expiresAt)) {
+      console.log('✅ Valid token found in localStorage');
+      spotifyService.setAccessToken(token);
+      setIsAuthenticated(true);
+      onAuthSuccess(token);
+    } else {
+      console.log('⚠️ No valid token found. Prompting login.');
+      localStorage.removeItem('spotify_token');
+      localStorage.removeItem('spotify_token_timestamp');
+      localStorage.removeItem('spotify_token_expires_at');
     }
   }, [onAuthSuccess]);
 
   const initiateAuth = async () => {
     try {
       setError(null);
+
+      // Clear old session data
       localStorage.removeItem('spotify_token');
       localStorage.removeItem('spotify_token_timestamp');
+      localStorage.removeItem('spotify_token_expires_at');
       localStorage.removeItem('spotify_auth_state');
 
       const verifier = generateCodeVerifier();
@@ -68,7 +74,9 @@ const SpotifyAuth: React.FC<SpotifyAuthProps> = ({ onAuthSuccess }) => {
         code_challenge: challenge
       });
 
-      window.location.href = `https://accounts.spotify.com/authorize?${params.toString()}`;
+      const authUrl = `https://accounts.spotify.com/authorize?${params.toString()}`;
+      console.log('🔗 Redirecting to Spotify Auth:', authUrl);
+      window.location.href = authUrl;
     } catch (err) {
       console.error('Login error:', err);
       setError('Failed to initialize Spotify login. Please try again.');

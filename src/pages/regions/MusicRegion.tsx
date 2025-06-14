@@ -1,4 +1,4 @@
-// MusicRegion.tsx (Fully Fixed + 'Open in Spotify' Button Added)
+// MusicRegion.tsx (Fully Fixed with Search + Playlists + 'Open in Spotify' Button + Token Expiry Handling)
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Play, Plus, Heart, MoreHorizontal } from 'lucide-react';
@@ -72,6 +72,17 @@ const MusicRegion: React.FC = () => {
     }
   }, [location]);
 
+  useEffect(() => {
+    const delayDebounce = setTimeout(() => {
+      if (searchQuery.trim()) {
+        handleSearch(searchQuery);
+      } else {
+        setSearchResults([]);
+      }
+    }, 400);
+    return () => clearTimeout(delayDebounce);
+  }, [searchQuery]);
+
   const loadUserContent = async () => {
     if (!currentUser) return;
     setIsLoading(true);
@@ -98,9 +109,18 @@ const MusicRegion: React.FC = () => {
       setIsLoading(false);
     }
   };
+
+  const handleSearch = async (query: string) => {
+    try {
+      const results = await spotifyService.searchTracks(query);
+      setSearchResults(results);
+    } catch (error) {
+      console.error('Search error:', error);
+    }
+  };
+
   const handleToggleLike = async (track: Track) => {
     if (!currentUser) return;
-  
     try {
       const isLiked = await musicFirebaseService.toggleLikedSong(currentUser.id, track);
       if (isLiked) {
@@ -112,7 +132,6 @@ const MusicRegion: React.FC = () => {
       console.error('Error toggling like:', error);
     }
   };
-  
 
   if (tokenExpired) {
     return (

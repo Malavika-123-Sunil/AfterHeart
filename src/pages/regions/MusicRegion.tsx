@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+/**
+ * import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Play, Plus, Heart, MoreHorizontal } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
@@ -368,6 +369,192 @@ const MusicRegion: React.FC = () => {
               </div>
             </div>
           )}
+        </div>
+      </div>
+
+      <CreatePlaylistModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onPlaylistCreated={loadUserContent}
+      />
+
+      <MusicPlayer />
+    </DashboardLayout>
+  );
+};
+
+export default MusicRegion;
+
+*/
+
+import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { Search, Play, Plus, Heart, MoreHorizontal } from 'lucide-react';
+import DashboardLayout from '../../components/layout/DashboardLayout';
+import SpotifyAuth from '../../components/SpotifyAuth';
+import CreatePlaylistModal from '../../components/CreatePlaylistModal';
+import MusicPlayer from '../../components/MusicPlayer';
+import { useAuth } from '../../contexts/AuthContext';
+import { spotifyService } from '../../services/spotify';
+import { musicFirebaseService } from '../../services/musicFirebase';
+import { useSpotifyPlayer } from '../../hooks/useSpotifyPlayer';
+import { useLocation } from 'react-router-dom';
+
+interface Track {
+  id: string;
+  name: string;
+  artists: { name: string }[];
+  duration_ms: number;
+  uri: string;
+  album: {
+    name: string;
+    images: { url: string }[];
+  };
+}
+
+interface Playlist {
+  id: string;
+  name: string;
+  description: string;
+  images: { url: string }[];
+  tracks: {
+    total: number;
+  };
+}
+
+const MusicRegion: React.FC = () => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentTab, setCurrentTab] = useState('discover');
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [searchResults, setSearchResults] = useState<Track[]>([]);
+  const [likedSongs, setLikedSongs] = useState<Track[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  const { currentUser } = useAuth();
+  const { playTrack } = useSpotifyPlayer();
+  const location = useLocation();
+
+  useEffect(() => {
+    const token = localStorage.getItem('spotify_token');
+    if (token) {
+      spotifyService.setAccessToken(token);
+      setIsAuthenticated(true);
+      loadUserContent();
+    }
+
+    const state = location.state as { error?: string };
+    if (state?.error) {
+      console.error('Authentication error:', state.error);
+    }
+  }, [location]);
+
+  const loadUserContent = async () => {
+    if (!currentUser) return;
+
+    setIsLoading(true);
+    try {
+      const userPlaylists = await spotifyService.getUserPlaylists();
+      setPlaylists(userPlaylists);
+
+      const likedSongs = await musicFirebaseService.getLikedSongs(currentUser.id);
+      const likedTracks = likedSongs.map(song => ({
+        id: song.spotifyTrackId,
+        name: song.name,
+        artists: [{ name: song.artist }],
+        album: {
+          name: song.name,
+          images: [{ url: song.imageUrl }]
+        },
+        duration_ms: 0,
+        uri: `spotify:track:${song.spotifyTrackId}`
+      } as Track));
+      setLikedSongs(likedTracks);
+    } catch (error) {
+      console.error('Error loading user content:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSearch = async (query: string) => {
+    setSearchQuery(query);
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
+    }
+
+    try {
+      const results = await spotifyService.searchTracks(query);
+      setSearchResults(results);
+    } catch (error) {
+      console.error('Search error:', error);
+    }
+  };
+
+  const handlePlayTrack = async (track: Track) => {
+    try {
+      await playTrack(track.uri);
+      await musicFirebaseService.addRecentlyPlayed(currentUser!.id, track);
+    } catch (error) {
+      console.error('Error playing track:', error);
+    }
+  };
+
+  const handleToggleLike = async (track: Track) => {
+    if (!currentUser) return;
+
+    try {
+      const isLiked = await musicFirebaseService.toggleLikedSong(currentUser.id, track);
+      if (isLiked) {
+        setLikedSongs(prev => [...prev, track]);
+      } else {
+        setLikedSongs(prev => prev.filter(t => t.id !== track.id));
+      }
+    } catch (error) {
+      console.error('Error toggling like:', error);
+    }
+  };
+
+  const handleAuthSuccess = (token: string) => {
+    spotifyService.setAccessToken(token);
+    setIsAuthenticated(true);
+    loadUserContent();
+  };
+
+  if (!isAuthenticated) {
+    return (
+      <DashboardLayout>
+        <SpotifyAuth onAuthSuccess={handleAuthSuccess} />
+      </DashboardLayout>
+    );
+  }
+
+  return (
+    <DashboardLayout>
+      <div className="max-w-6xl mx-auto">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          <h1 className="text-3xl md:text-4xl font-display font-bold text-primary-800 mb-3">
+            Music Therapy
+          </h1>
+          <p className="text-accent-700 mb-8 text-lg">
+            Discover healing melodies and create playlists that support your emotional journey.
+          </p>
+
+          {/* 🎧 Premium Note */}
+          <div className="bg-yellow-50 text-yellow-800 px-5 py-4 rounded-xl shadow-sm mb-6 text-sm text-center">
+            🎧 <strong>Note:</strong> To play music inside this app, a Spotify Premium account is required.
+            But don’t worry — you can still explore, save, and open full tracks directly in the Spotify app!
+          </div>
+        </motion.div>
+
+        <div className="bg-white rounded-2xl shadow-md overflow-hidden mb-8">
+          {/* your full playlist/search/liked songs tabs rendering code goes here */}
         </div>
       </div>
 

@@ -1,6 +1,14 @@
-import axios from 'axios';
+//import axios from 'axios';
 
 const SPOTIFY_API_BASE = 'https://api.spotify.com/v1';
+
+// Check if Spotify token has expired
+export function isSpotifyTokenExpired(): boolean {
+  const expiry = localStorage.getItem('spotify_token_expires_at');
+  if (!expiry) return true;
+  return Date.now() > parseInt(expiry, 10);
+}
+
 
 export interface SpotifyTrack {
   id: string;

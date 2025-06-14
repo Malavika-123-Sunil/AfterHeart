@@ -1,4 +1,3 @@
-// SpotifyCallback.tsx
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { spotifyService } from '../services/spotify';
@@ -9,11 +8,13 @@ const SpotifyCallback: React.FC = () => {
   useEffect(() => {
     const handleCallback = () => {
       try {
-        console.log('Processing Spotify callback...');
+        console.log('🎧 Processing Spotify callback...');
 
+        // Check for error in query string
         const queryParams = new URLSearchParams(window.location.search);
         const queryError = queryParams.get('error');
         if (queryError) {
+          console.error('❌ Spotify query error:', queryError);
           navigate('/music', {
             state: {
               error: 'Authentication failed',
@@ -23,15 +24,25 @@ const SpotifyCallback: React.FC = () => {
           return;
         }
 
-        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        // Get access token from URL hash
+        const fullHash = window.location.hash;
+        console.log('🔎 Spotify URL Hash:', fullHash);
+
+        const hashParams = new URLSearchParams(fullHash.substring(1));
         const accessToken = hashParams.get('access_token');
         const expiresIn = hashParams.get('expires_in') || '3600';
         const state = hashParams.get('state');
         const storedState = localStorage.getItem('spotify_auth_state');
 
+        console.log('🔐 Access token received:', accessToken);
+        console.log('🧾 Expires in (sec):', expiresIn);
+        console.log('🔁 State:', state, 'Stored State:', storedState);
+
         localStorage.removeItem('spotify_auth_state');
 
+        // Validate state
         if (!state || state !== storedState) {
+          console.error('⚠️ State mismatch');
           navigate('/music', {
             state: {
               error: 'Security verification failed',
@@ -41,7 +52,9 @@ const SpotifyCallback: React.FC = () => {
           return;
         }
 
+        // No access token? Fail
         if (!accessToken) {
+          console.error('⚠️ No access token found in hash');
           navigate('/music', {
             state: {
               error: 'Authentication incomplete',
@@ -51,17 +64,19 @@ const SpotifyCallback: React.FC = () => {
           return;
         }
 
+        // Save token + expiration
         const expirationTime = Date.now() + parseInt(expiresIn) * 1000;
-
-        // Store token and expiration
         localStorage.setItem('spotify_token', accessToken);
         localStorage.setItem('spotify_token_timestamp', Date.now().toString());
         localStorage.setItem('spotify_token_expires_at', expirationTime.toString());
 
+        console.log('✅ Spotify token saved to localStorage');
         spotifyService.setAccessToken(accessToken);
+
         navigate('/music', { state: { success: true } });
+
       } catch (err) {
-        console.error('Callback handling error:', err);
+        console.error('🔥 Callback handling error:', err);
         navigate('/music', {
           state: {
             error: 'Authentication error',
@@ -86,11 +101,3 @@ const SpotifyCallback: React.FC = () => {
 };
 
 export default SpotifyCallback;
-
-
-// spotifyService.ts (Add this function)
-export function isSpotifyTokenExpired() {
-  const expiry = localStorage.getItem('spotify_token_expires_at');
-  if (!expiry) return true;
-  return Date.now() > parseInt(expiry);
-}

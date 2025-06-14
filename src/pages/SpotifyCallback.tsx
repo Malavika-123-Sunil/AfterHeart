@@ -1,81 +1,73 @@
+// SpotifyCallback.tsx
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { spotifyService } from '../services/spotify';
-
-const SPOTIFY_CLIENT_ID = 'e80cdb9818d44e40834810e99cc60859';
-const REDIRECT_URI = 'https://after-heart.vercel.app/callback';
 
 const SpotifyCallback: React.FC = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const handleCallback = async () => {
+    const handleCallback = () => {
       try {
+        console.log('Processing Spotify callback...');
+
         const queryParams = new URLSearchParams(window.location.search);
-        const code = queryParams.get('code');
-        const error = queryParams.get('error');
-        const state = queryParams.get('state');
+        const queryError = queryParams.get('error');
+        if (queryError) {
+          navigate('/music', {
+            state: {
+              error: 'Authentication failed',
+              details: queryError,
+            },
+          });
+          return;
+        }
+
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const accessToken = hashParams.get('access_token');
+        const expiresIn = hashParams.get('expires_in') || '3600';
+        const state = hashParams.get('state');
         const storedState = localStorage.getItem('spotify_auth_state');
 
-        if (error) {
-          console.error('Spotify auth error:', error);
-          navigate('/music', { state: { error: 'Authentication failed', details: error } });
+        localStorage.removeItem('spotify_auth_state');
+
+        if (!state || state !== storedState) {
+          navigate('/music', {
+            state: {
+              error: 'Security verification failed',
+              details: 'Please try logging in again',
+            },
+          });
           return;
         }
 
-        if (state !== storedState) {
-          console.error('State mismatch');
-          navigate('/music', { state: { error: 'Security verification failed', details: 'State mismatch. Try again.' } });
+        if (!accessToken) {
+          navigate('/music', {
+            state: {
+              error: 'Authentication incomplete',
+              details: 'No access token received. Please try again.',
+            },
+          });
           return;
         }
 
-        if (!code) {
-          console.error('No code received');
-          navigate('/music', { state: { error: 'Missing authorization code', details: 'Try logging in again.' } });
-          return;
-        }
+        const expirationTime = Date.now() + parseInt(expiresIn) * 1000;
 
-        const verifier = localStorage.getItem('spotify_code_verifier');
-        if (!verifier) {
-          console.error('Missing code verifier');
-          navigate('/music', { state: { error: 'Missing verifier', details: 'Please reconnect your Spotify account.' } });
-          return;
-        }
-
-        // Exchange code for access token
-        const body = new URLSearchParams({
-          client_id: SPOTIFY_CLIENT_ID,
-          grant_type: 'authorization_code',
-          code,
-          redirect_uri: REDIRECT_URI,
-          code_verifier: verifier
-        });
-
-        const response = await fetch('https://accounts.spotify.com/api/token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Token exchange failed: ${errorText}`);
-        }
-
-        const data = await response.json();
-        const accessToken = data.access_token;
-
-        spotifyService.setAccessToken(accessToken);
+        // Store token and expiration
         localStorage.setItem('spotify_token', accessToken);
         localStorage.setItem('spotify_token_timestamp', Date.now().toString());
+        localStorage.setItem('spotify_token_expires_at', expirationTime.toString());
 
+        spotifyService.setAccessToken(accessToken);
         navigate('/music', { state: { success: true } });
       } catch (err) {
-        console.error('Spotify callback error:', err);
-        navigate('/music', { state: { error: 'Authentication error', details: 'Something went wrong.' } });
-      } finally {
-        localStorage.removeItem('spotify_auth_state');
-        localStorage.removeItem('spotify_code_verifier');
+        console.error('Callback handling error:', err);
+        navigate('/music', {
+          state: {
+            error: 'Authentication error',
+            details: 'An unexpected error occurred. Please try again.',
+          },
+        });
       }
     };
 
@@ -94,3 +86,11 @@ const SpotifyCallback: React.FC = () => {
 };
 
 export default SpotifyCallback;
+
+
+// spotifyService.ts (Add this function)
+export function isSpotifyTokenExpired() {
+  const expiry = localStorage.getItem('spotify_token_expires_at');
+  if (!expiry) return true;
+  return Date.now() > parseInt(expiry);
+}

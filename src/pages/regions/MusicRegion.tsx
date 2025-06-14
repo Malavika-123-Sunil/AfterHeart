@@ -554,7 +554,28 @@ const MusicRegion: React.FC = () => {
         </motion.div>
 
         <div className="bg-white rounded-2xl shadow-md overflow-hidden mb-8">
-          {/* your full playlist/search/liked songs tabs rendering code goes here */}
+          <div className="flex items-center p-4 border-b border-accent-100">
+            <div className="relative flex-1">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search size={18} className="text-accent-500" />
+              </div>
+              <input
+                type="text"
+                className="input pl-10"
+                placeholder="Search songs, artists, or playlists..."
+                value={searchQuery}
+                onChange={(e) => handleSearch(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="flex border-b border-accent-100">
+            <button className={`px-6 py-4 font-medium text-sm transition-colors ${currentTab === 'discover' ? 'text-primary-700 border-b-2 border-primary-500' : 'text-accent-600 hover:text-primary-600'}`} onClick={() => setCurrentTab('discover')}>Discover</button>
+            <button className={`px-6 py-4 font-medium text-sm transition-colors ${currentTab === 'playlists' ? 'text-primary-700 border-b-2 border-primary-500' : 'text-accent-600 hover:text-primary-600'}`} onClick={() => setCurrentTab('playlists')}>Your Playlists</button>
+            <button className={`px-6 py-4 font-medium text-sm transition-colors ${currentTab === 'liked' ? 'text-primary-700 border-b-2 border-primary-500' : 'text-accent-600 hover:text-primary-600'}`} onClick={() => setCurrentTab('liked')}>Liked Songs</button>
+          </div>
+
+          {/* Your original tab rendering and tables go here */}
         </div>
       </div>
 

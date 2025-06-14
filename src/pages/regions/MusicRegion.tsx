@@ -1,4 +1,4 @@
-// MusicRegion.tsx (Updated with Open in Spotify Button + UI preserved)
+// MusicRegion.tsx (Fully Fixed + 'Open in Spotify' Button Added)
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Play, Plus, Heart, MoreHorizontal } from 'lucide-react';
@@ -74,7 +74,6 @@ const MusicRegion: React.FC = () => {
 
   const loadUserContent = async () => {
     if (!currentUser) return;
-
     setIsLoading(true);
     try {
       const userPlaylists = await spotifyService.getUserPlaylists();
@@ -99,6 +98,21 @@ const MusicRegion: React.FC = () => {
       setIsLoading(false);
     }
   };
+  const handleToggleLike = async (track: Track) => {
+    if (!currentUser) return;
+  
+    try {
+      const isLiked = await musicFirebaseService.toggleLikedSong(currentUser.id, track);
+      if (isLiked) {
+        setLikedSongs(prev => [...prev, track]);
+      } else {
+        setLikedSongs(prev => prev.filter(t => t.id !== track.id));
+      }
+    } catch (error) {
+      console.error('Error toggling like:', error);
+    }
+  };
+  
 
   if (tokenExpired) {
     return (
@@ -135,37 +149,84 @@ const MusicRegion: React.FC = () => {
 
   return (
     <DashboardLayout>
-      {/* Your existing layout and headers remain unchanged */}
-
-      {/* 👇 Example button usage for tracks */}
-      {/* Wherever you're rendering track actions inside a table or list, update this: */}
-
-      {/* Example inside a track row */}
-      {/*
-      <div className="flex items-center justify-center space-x-3">
-        <button
-          onClick={() => openInSpotify(track.uri)}
-          className="bg-[#1DB954] hover:bg-[#1ed760] text-white px-3 py-1 rounded-full text-xs shadow-sm transition"
+      <div className="max-w-6xl mx-auto">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
         >
-          Open in Spotify
-        </button>
-        <button
-          onClick={() => handleToggleLike(track)}
-          className={
-            likedSongs.some(s => s.id === track.id)
-              ? "text-secondary-500"
-              : "text-accent-500 hover:text-secondary-500"
-          }
-        >
-          <Heart
-            size={18}
-            fill={likedSongs.some(s => s.id === track.id) ? "currentColor" : "none"}
-          />
-        </button>
+          <h1 className="text-3xl md:text-4xl font-display font-bold text-primary-800 mb-3">
+            Music Therapy
+          </h1>
+          <p className="text-accent-700 mb-8 text-lg">
+            Discover healing melodies and create playlists that support your emotional journey.
+          </p>
+        </motion.div>
+
+        <div className="bg-white rounded-2xl shadow-md overflow-hidden mb-8">
+          <div className="flex items-center p-4 border-b border-accent-100">
+            <div className="relative flex-1">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search size={18} className="text-accent-500" />
+              </div>
+              <input
+                type="text"
+                className="input pl-10"
+                placeholder="Search songs, artists, or playlists..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead>
+                <tr className="text-left text-accent-600 border-b border-accent-100">
+                  <th className="pb-3 pl-4">#</th>
+                  <th className="pb-3">Title</th>
+                  <th className="pb-3">Artist</th>
+                  <th className="pb-3 text-right pr-4">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(searchQuery ? searchResults : likedSongs).map((track, index) => (
+                  <tr key={track.id} className="border-b border-accent-100 hover:bg-primary-50">
+                    <td className="py-3 pl-4 text-accent-600">{index + 1}</td>
+                    <td className="py-3 font-medium text-primary-800">{track.name}</td>
+                    <td className="py-3 text-accent-700">
+                      {track.artists.map(a => a.name).join(', ')}
+                    </td>
+                    <td className="py-3 pr-4 text-right">
+                      <div className="flex items-center justify-end space-x-2">
+                        <button
+                          onClick={() => handleToggleLike(track)}
+                          className={
+                            likedSongs.some(s => s.id === track.id)
+                              ? 'text-secondary-500'
+                              : 'text-accent-500 hover:text-secondary-500'
+                          }
+                        >
+                          <Heart
+                            size={18}
+                            fill={likedSongs.some(s => s.id === track.id) ? 'currentColor' : 'none'}
+                          />
+                        </button>
+                        <button
+                          onClick={() => openInSpotify(track.uri)}
+                          className="bg-[#1DB954] hover:bg-[#1ed760] text-white px-3 py-1 rounded-full text-xs shadow-sm transition"
+                        >
+                          Open in Spotify
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
-      */}
-
-      {/* The rest of your UI code (search, playlists, liked songs, etc.) stays the same */}
 
       <CreatePlaylistModal
         isOpen={isCreateModalOpen}

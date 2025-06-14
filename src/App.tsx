@@ -12,7 +12,6 @@ import MusicRegion from './pages/regions/MusicRegion';
 import TripRegion from './pages/regions/TripRegion';
 import MentalWellnessRegion from './pages/regions/MentalWellnessRegion';
 import NotFound from './pages/NotFound';
-import SpotifyCallback from './pages/SpotifyCallback';
 
 // Components
 import ProtectedRoute from './components/auth/ProtectedRoute';
@@ -35,9 +34,6 @@ function AnimatedRoutes() {
           <Route path="/trips" element={<TripRegion />} />
           <Route path="/wellness" element={<MentalWellnessRegion />} />
         </Route>
-
-        {/* Spotify callback route */}
-        <Route path="/callback" element={<SpotifyCallback />} />
 
         {/* 404 route */}
         <Route path="*" element={<NotFound />} />

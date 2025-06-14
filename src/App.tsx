@@ -1,4 +1,6 @@
 import React from 'react';
+import SpotifyCallback from './pages/SpotifyCallback';
+
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { AuthProvider } from './contexts/AuthContext';
@@ -26,6 +28,8 @@ function AnimatedRoutes() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/callback" element={<SpotifyCallback />} />
+
         
         {/* Protected routes */}
         <Route element={<ProtectedRoute />}>
@@ -35,7 +39,9 @@ function AnimatedRoutes() {
           <Route path="/wellness" element={<MentalWellnessRegion />} />
         </Route>
 
+        
         {/* 404 route */}
+
         <Route path="*" element={<NotFound />} />
       </Routes>
     </AnimatePresence>
